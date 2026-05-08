@@ -98,7 +98,7 @@ const products = [
   },
   {
     id: 'dota',
-    title: 'Dota 2 Bundle',
+    title: 'Dota 2',
     image: '/images/dota-2.jpeg?v=2',
     genre: 'Strategy',
     platform: 'Steam',
@@ -142,7 +142,7 @@ const products = [
   },
   {
     id: 'cs2',
-    title: 'Counter-Strike 2 Prime',
+    title: 'Counter-Strike 2',
     image: '/images/counter-strike-2.jpeg',
     genre: 'Action',
     platform: 'Steam',
@@ -208,7 +208,7 @@ const products = [
   },
   {
     id: 'war-thunder',
-    title: 'War Thunder Pack',
+    title: 'War Thunder',
     image: '/images/war-thunder.jpeg',
     genre: 'Sim',
     platform: 'Gaijin',
@@ -230,7 +230,7 @@ const products = [
   },
   {
     id: 'pubg',
-    title: 'PUBG Pack',
+    title: 'PUBG',
     image: '/images/pubg.jpeg',
     genre: 'Action',
     platform: 'Steam',
