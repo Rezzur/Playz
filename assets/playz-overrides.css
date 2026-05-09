@@ -142,6 +142,28 @@
   scrollbar-color: var(--accent) transparent;
   -webkit-mask-image: linear-gradient(90deg, #000 0 calc(100% - 18px), transparent);
   mask-image: linear-gradient(90deg, #000 0 calc(100% - 18px), transparent);
+  overflow-anchor: none;
+}
+
+.product-detail-section,
+.detail-layout,
+.detail-media {
+  overflow-anchor: none;
+}
+
+.detail-layout {
+  align-items: start !important;
+}
+
+.detail-media {
+  height: clamp(520px, 46vw, 640px);
+  min-height: 0 !important;
+}
+
+.detail-media > img {
+  height: 100% !important;
+  max-height: none !important;
+  object-fit: contain;
 }
 
 .gallery-thumbs::-webkit-scrollbar {
@@ -168,6 +190,11 @@
 }
 
 @media (width <= 760px) {
+  .detail-media {
+    height: auto;
+    aspect-ratio: 4 / 5 !important;
+  }
+
   .gallery-thumbs {
     left: 14px !important;
     right: 14px !important;
