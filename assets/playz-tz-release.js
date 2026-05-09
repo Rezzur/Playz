@@ -86,6 +86,24 @@
     if (!restore || restore.done) return;
     restore.done = true;
 
+    const scrollInstantly = (y) => {
+      const root = document.documentElement;
+      const body = document.body;
+      const wasForcedByReloadScript = root.dataset.instantReloadRestore === "true";
+      const previousRootBehavior = wasForcedByReloadScript ? "" : root.style.scrollBehavior;
+      const previousBodyBehavior = body?.style.scrollBehavior || "";
+
+      root.style.scrollBehavior = "auto";
+      if (body) body.style.scrollBehavior = "auto";
+      window.scrollTo({ top: y, left: 0, behavior: "auto" });
+
+      requestAnimationFrame(() => {
+        root.style.scrollBehavior = previousRootBehavior;
+        delete root.dataset.instantReloadRestore;
+        if (body) body.style.scrollBehavior = previousBodyBehavior;
+      });
+    };
+
     const targetHash = restore.hash || "";
     const savedY = Number(restore.y || 0);
     let attempts = 0;
@@ -113,16 +131,14 @@
         return;
       }
 
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: y, left: 0, behavior: "smooth" });
-        if (targetHash) {
-          window.history.replaceState(
-            null,
-            "",
-            `${window.location.pathname}${window.location.search}${targetHash}`
-          );
-        }
-      });
+      scrollInstantly(y);
+      if (targetHash) {
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}${targetHash}`
+        );
+      }
     };
 
     requestAnimationFrame(run);
@@ -234,6 +250,16 @@
     "Оферта": "/offer.html",
     "Политика": "/privacy.html",
   };
+  let legalHydrationId = 0;
+
+  const getLatestLegalModal = () => {
+    const modals = $$(".legal-modal");
+    return modals[modals.length - 1] || null;
+  };
+
+  const cancelLegalHydration = () => {
+    legalHydrationId += 1;
+  };
 
   const loadLegalPage = async (label) => {
     if (legalCache.has(label)) return legalCache.get(label);
@@ -265,13 +291,15 @@
     return promise;
   };
 
-  const hydrateLegalModal = async (label, attempt = 0) => {
-    const modal = $(".legal-modal");
+  const hydrateLegalModal = async (label, token, attempt = 0) => {
+    if (token !== legalHydrationId) return;
+
+    const modal = getLatestLegalModal();
     const body = modal && $(".legal-copy", modal);
 
     if (!modal || !body) {
-      if (attempt < 12) {
-        window.setTimeout(() => hydrateLegalModal(label, attempt + 1), 50);
+      if (attempt < 12 && token === legalHydrationId) {
+        window.setTimeout(() => hydrateLegalModal(label, token, attempt + 1), 50);
       }
       return;
     }
@@ -291,6 +319,7 @@
 
     try {
       const content = await loadLegalPage(label);
+      if (token !== legalHydrationId || !document.body.contains(modal)) return;
       if (!content) return;
 
       fullBody.innerHTML = content.body;
@@ -392,9 +421,45 @@
       button.addEventListener("click", () => {
         const label = getText(button);
         if (!legalPages[label]) return;
-        requestAnimationFrame(() => hydrateLegalModal(label));
+        const token = legalHydrationId + 1;
+        legalHydrationId = token;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => hydrateLegalModal(label, token));
+        });
       });
     });
+  };
+
+  const bindLegalModalCloseGuard = () => {
+    if (document.documentElement.dataset.legalCloseGuardBound) return;
+    document.documentElement.dataset.legalCloseGuardBound = "true";
+
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+
+        const legalModal = target.closest(".legal-modal");
+        const closeButton = target.closest(".legal-modal .modal-close");
+        const backdrop = target.closest(".modal-backdrop");
+
+        if (closeButton || (backdrop && !legalModal)) {
+          cancelLegalHydration();
+        }
+      },
+      true
+    );
+
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key === "Escape" && $(".legal-modal")) {
+          cancelLegalHydration();
+        }
+      },
+      true
+    );
   };
 
   const enhanceProductCarousel = () => {
@@ -479,6 +544,219 @@
         };
         localStorage.setItem(SAVED_SEARCH_STORE, JSON.stringify(saved));
         saveEvent("save_search_to_account", saved);
+      }
+    });
+  };
+
+  const bindAdaptiveCursorOverride = () => {
+    if (document.documentElement.dataset.adaptiveCursorBound) return;
+    document.documentElement.dataset.adaptiveCursorBound = "true";
+
+    const cyan = { red: 116, green: 244, blue: 223, alpha: 1 };
+    const ink = { red: 7, green: 16, blue: 14, alpha: 1 };
+    const fallbackSurface = { red: 12, green: 13, blue: 10, alpha: 1 };
+    const editableSelector = [
+      "textarea",
+      "input:not([type])",
+      "input[type='text']",
+      "input[type='search']",
+      "input[type='email']",
+      "input[type='tel']",
+      "input[type='url']",
+      "input[type='password']",
+      "input[type='number']",
+      "[contenteditable='true']"
+    ].join(",");
+    const selectableSelector = [
+      "p",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "li",
+      "dt",
+      "dd",
+      "label",
+      "small",
+      "strong",
+      "em",
+      "b",
+      "span:not(.target-cursor__dot):not(.target-cursor__external-icon)"
+    ].join(",");
+
+    let lastPoint = { x: 0, y: 0 };
+    let pointerDown = false;
+    let dragMaySelectText = false;
+    let textSelecting = false;
+    let downPoint = { x: 0, y: 0 };
+    let frame = 0;
+
+    const parseColor = (value) => {
+      if (!value || value === "transparent") return null;
+      const match = value.match(/rgba?\(([^)]+)\)/);
+      if (!match) return null;
+
+      const parts = match[1]
+        .split(",")
+        .map((part) => part.trim())
+        .map((part) => part.endsWith("%") ? (Number(part.slice(0, -1)) / 100) * 255 : Number(part));
+
+      if (parts.length < 3 || parts.some((part) => Number.isNaN(part))) return null;
+
+      return {
+        red: parts[0],
+        green: parts[1],
+        blue: parts[2],
+        alpha: parts[3] === undefined ? 1 : Math.max(0, Math.min(1, parts[3])),
+      };
+    };
+
+    const blend = (foreground, background) => {
+      const alpha = foreground.alpha + background.alpha * (1 - foreground.alpha);
+      if (!alpha) return { ...background };
+
+      return {
+        red: (foreground.red * foreground.alpha + background.red * background.alpha * (1 - foreground.alpha)) / alpha,
+        green: (foreground.green * foreground.alpha + background.green * background.alpha * (1 - foreground.alpha)) / alpha,
+        blue: (foreground.blue * foreground.alpha + background.blue * background.alpha * (1 - foreground.alpha)) / alpha,
+        alpha,
+      };
+    };
+
+    const luminance = (color) => {
+      const channel = (value) => {
+        const normalized = value / 255;
+        return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+      };
+
+      return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue);
+    };
+
+    const readSurfaceColor = (target) => {
+      let surface = fallbackSurface;
+      let node = target instanceof Element ? target : null;
+
+      while (node && node !== document.documentElement) {
+        const styles = getComputedStyle(node);
+        const background = parseColor(styles.backgroundColor);
+
+        if (background && background.alpha > 0) {
+          surface = blend(background, surface);
+          if (background.alpha > 0.96) break;
+        }
+
+        node = node.parentElement;
+      }
+
+      return surface;
+    };
+
+    const colorForSurface = (surface) => {
+      const brightSurface = luminance(surface) > 0.48;
+      const color = brightSurface ? ink : cyan;
+      const shadow = brightSurface
+        ? "rgba(7, 16, 14, 0.34)"
+        : "rgba(116, 244, 223, 0.44)";
+
+      return {
+        color: `rgb(${Math.round(color.red)} ${Math.round(color.green)} ${Math.round(color.blue)})`,
+        shadow,
+      };
+    };
+
+    const isEditable = (target) => target instanceof Element && !!target.closest(editableSelector);
+
+    const canDragSelectText = (target) => {
+      if (!(target instanceof Element)) return false;
+      if (target.closest("button, a[href], input, textarea, select, [contenteditable='true']")) return false;
+      return !!target.closest(selectableSelector);
+    };
+
+    const hasLiveSelection = () => {
+      const selection = window.getSelection?.();
+      return !!selection && !selection.isCollapsed && String(selection).trim().length > 0;
+    };
+
+    const apply = () => {
+      frame = 0;
+
+      const cursor = $(".target-cursor");
+      if (!cursor) return;
+
+      const target = document.elementFromPoint(lastPoint.x, lastPoint.y);
+      const surface = readSurfaceColor(target);
+      const { color, shadow } = colorForSurface(surface);
+      const shouldUseTextMode = isEditable(target) || (pointerDown && textSelecting) || (pointerDown && hasLiveSelection());
+
+      cursor.style.setProperty("--cursor-color", color);
+      cursor.style.setProperty("--cursor-shadow", shadow);
+      cursor.style.setProperty("--playz-cursor-color", color);
+      cursor.style.setProperty("--playz-cursor-shadow", shadow);
+      cursor.classList.toggle("is-text", shouldUseTextMode);
+      cursor.classList.toggle("playz-text-mode", shouldUseTextMode);
+      cursor.classList.toggle("playz-dot-mode", !shouldUseTextMode);
+    };
+
+    const schedule = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(apply);
+    };
+
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.button && event.button !== 0) return;
+        pointerDown = true;
+        textSelecting = false;
+        downPoint = { x: event.clientX, y: event.clientY };
+        dragMaySelectText = canDragSelectText(event.target);
+        lastPoint = { x: event.clientX, y: event.clientY };
+        schedule();
+      },
+      true
+    );
+
+    document.addEventListener(
+      "pointermove",
+      (event) => {
+        lastPoint = { x: event.clientX, y: event.clientY };
+
+        if (pointerDown && dragMaySelectText) {
+          const distance = Math.hypot(event.clientX - downPoint.x, event.clientY - downPoint.y);
+          textSelecting = distance > 4;
+        }
+
+        schedule();
+      },
+      true
+    );
+
+    const endPointerSelection = (event) => {
+      pointerDown = false;
+      dragMaySelectText = false;
+      textSelecting = false;
+
+      if (event?.clientX !== undefined) {
+        lastPoint = { x: event.clientX, y: event.clientY };
+      }
+
+      schedule();
+    };
+
+    document.addEventListener("pointerup", endPointerSelection, true);
+    document.addEventListener("pointercancel", endPointerSelection, true);
+    document.addEventListener("selectstart", () => {
+      if (pointerDown) {
+        textSelecting = true;
+        schedule();
+      }
+    }, true);
+    document.addEventListener("selectionchange", () => {
+      if (!pointerDown && textSelecting) {
+        textSelecting = false;
+        schedule();
       }
     });
   };
@@ -713,6 +991,8 @@
     bindGlobalPressFeedback();
     bindServerForms();
     bindSavedSearch();
+    bindLegalModalCloseGuard();
+    bindAdaptiveCursorOverride();
     enhanceCheckout();
     runEnhancements();
     restoreReloadScroll();

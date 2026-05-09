@@ -40,7 +40,9 @@
               y: Number.isFinite(scrollY) ? scrollY : 0
             };
 
-            window.scrollTo(0, 0);
+            document.documentElement.style.scrollBehavior = "auto";
+            document.documentElement.dataset.instantReloadRestore = "true";
+            window.scrollTo(0, Number.isFinite(scrollY) ? scrollY : 0);
             window.history.replaceState(
               null,
               "",
@@ -91,8 +93,8 @@
     </script>
     <script type="module" crossorigin src="/assets/index-C-bIT83M.js?v=review-rating-1"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-CDj8XXHm.css">
-    <link rel="stylesheet" href="/assets/playz-overrides.css?v=legal-modal-2">
-    <script type="module" src="/assets/playz-tz-release.js?v=legal-modal-2"></script>
+    <link rel="stylesheet" href="/assets/playz-overrides.css?v=instant-scroll-restore-1">
+    <script type="module" src="/assets/playz-tz-release.js?v=instant-scroll-restore-1"></script>
   </head>
   <body>
     <div id="root"></div>
