@@ -229,6 +229,91 @@
     return response.json();
   };
 
+  const legalCache = new Map();
+  const legalPages = {
+    "Оферта": "/offer.html",
+    "Политика": "/privacy.html",
+  };
+
+  const loadLegalPage = async (label) => {
+    if (legalCache.has(label)) return legalCache.get(label);
+
+    const href = legalPages[label];
+    if (!href) return null;
+
+    const promise = fetch(href)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.text();
+      })
+      .then((html) => {
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const title = getText($(".legal-page h1", doc)) || label;
+        const article = $(".legal-page article", doc);
+
+        if (!article) throw new Error("Legal article is missing");
+
+        article.querySelector(".brand")?.remove();
+
+        return {
+          title,
+          body: article.innerHTML,
+        };
+      });
+
+    legalCache.set(label, promise);
+    return promise;
+  };
+
+  const hydrateLegalModal = async (label, attempt = 0) => {
+    const modal = $(".legal-modal");
+    const body = modal && $(".legal-copy", modal);
+
+    if (!modal || !body) {
+      if (attempt < 12) {
+        window.setTimeout(() => hydrateLegalModal(label, attempt + 1), 50);
+      }
+      return;
+    }
+
+    if (modal.dataset.fullLegal === label) return;
+    modal.dataset.fullLegal = label;
+    modal.classList.add("is-full-legal");
+
+    let fullBody = $(".legal-copy-full", modal);
+    if (!fullBody) {
+      fullBody = document.createElement("div");
+      fullBody.className = "legal-copy-full";
+      body.after(fullBody);
+    }
+
+    fullBody.classList.add("is-loading");
+
+    try {
+      const content = await loadLegalPage(label);
+      if (!content) return;
+
+      fullBody.innerHTML = content.body;
+      fullBody.querySelectorAll("a[href]").forEach((link) => {
+        const href = link.getAttribute("href") || "";
+        if (/^(https?:|mailto:|tel:)/.test(href)) {
+          link.setAttribute("data-external", "true");
+          if (href.startsWith("http")) {
+            link.target = "_blank";
+            link.rel = "noreferrer";
+          }
+        }
+      });
+      saveEvent("legal_modal_full_content", { label });
+    } catch (error) {
+      modal.dataset.fullLegal = "";
+      modal.classList.remove("is-full-legal");
+      saveEvent("legal_modal_full_content_error", { label, message: error.message });
+    } finally {
+      fullBody.classList.remove("is-loading");
+    }
+  };
+
   const setFormStatus = (form, text, isError = false) => {
     let status = $(".form-server-status", form);
     if (!status) {
@@ -300,21 +385,15 @@
   };
 
   const enhanceLegalLinks = () => {
-    const map = {
-      "Оферта": "/offer.html",
-      "Политика": "/privacy.html",
-    };
-
     $$(".footer nav:not(.footer-menu) button").forEach((button) => {
-      const label = getText(button);
-      const href = map[label];
-      if (!href) return;
-
-      const link = document.createElement("a");
-      link.href = href;
-      link.textContent = label;
-      link.className = button.className;
-      button.replaceWith(link);
+      if (button.dataset.legalHydrateReady) return;
+      button.dataset.legalHydrateReady = "true";
+      button.classList.add("playz-pressable");
+      button.addEventListener("click", () => {
+        const label = getText(button);
+        if (!legalPages[label]) return;
+        requestAnimationFrame(() => hydrateLegalModal(label));
+      });
     });
   };
 
@@ -559,42 +638,47 @@
     );
   };
 
+  const enhanceMapLink = () => {
+    const link = $(".map-block a");
+    if (!link || link.dataset.mapLinkReady) return;
+    link.dataset.mapLinkReady = "true";
+    link.remove();
+  };
+
   const enhancePaymentLabels = () => {
     const icons = {
       visa: `
-        <svg class="payment-service__mark" viewBox="0 0 84 44" aria-hidden="true" focusable="false">
-          <rect x="1" y="1" width="82" height="42" rx="9" fill="#f6f7ff"/>
-          <path fill="#19244f" d="M23.9 29.3h-5.1l3.2-14.6h5.1l-3.2 14.6Zm18.5-14.2c-1-.4-2.5-.8-4.3-.8-4.7 0-8 2.3-8 5.6 0 2.5 2.4 3.8 4.2 4.6 1.9.9 2.5 1.4 2.5 2.2 0 1.2-1.5 1.7-3 1.7-2 0-3.1-.3-4.7-1l-.7-.3-.7 4.1c1.1.5 3.2.9 5.3 1 5 0 8.2-2.3 8.3-5.9 0-1.9-1.2-3.4-4-4.6-1.7-.8-2.7-1.3-2.7-2.1 0-.7.9-1.5 2.8-1.5 1.6 0 2.8.3 3.7.7l.4.2.9-3.9Zm13.1-.4h-4c-1.2 0-2.2.3-2.7 1.5L41 29.3h5.3l1.1-2.8h6.5l.6 2.8h4.7l-3.7-14.6Zm-6.6 8 2.7-6.6 1.5 6.6h-4.2Zm-34.4-8-5 10-2.1-9.7c-.2-1.1-1.1-1.4-2.1-1.4H1.2l-.1.4c1 .2 2.1.6 2.8 1 1.7.9 2.1 1.7 2.4 3l3.9 11.3h5.4l8-14.6h-5.1Z"/>
+        <svg class="payment-service__mark" viewBox="0 0 88 36" aria-hidden="true" focusable="false">
+          <text x="4" y="25" fill="#1f2b5d" font-family="Arial Black, Arial, sans-serif" font-size="25" font-style="italic" font-weight="900" letter-spacing="-1.6">VISA</text>
         </svg>
       `,
       mir: `
-        <svg class="payment-service__mark" viewBox="0 0 76 44" aria-hidden="true" focusable="false">
-          <rect x="1" y="1" width="74" height="42" rx="9" fill="#f6f7ff"/>
-          <path fill="#74f4df" d="M13 14h8.7c1.4 0 2.7.9 3.1 2.2l2 6.2 4-8.4h6.5v16h-4.5v-9.2l-4.6 9.2h-3.5l-3-9.2V30H17V18.2h-4V14Z"/>
-          <path fill="#e9ff68" d="M41 14h9.7c4.6 0 8.3 3.5 8.3 8s-3.7 8-8.3 8H41V14Zm4.8 4.2v7.6h4.6c2.2 0 3.8-1.6 3.8-3.8s-1.6-3.8-3.8-3.8h-4.6Z"/>
-          <path fill="#ff4ec7" d="M58 14h7l-4.1 5.7H55L58 14Z"/>
+        <svg class="payment-service__mark" viewBox="0 0 88 36" aria-hidden="true" focusable="false">
+          <text x="2" y="25" fill="#24464d" font-family="Arial Black, Arial, sans-serif" font-size="25" font-weight="900" letter-spacing="-1.4">МИР</text>
+          <path d="M71 8h11l-6.7 8.3H64.4L71 8Z" fill="#8ebf6b"/>
+          <path d="M74.8 16.3h8.4l-5 6.2h-8.3l4.9-6.2Z" fill="#b96cae"/>
         </svg>
       `,
       sbp: `
         <svg class="payment-service__mark" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
-          <rect x="1" y="1" width="42" height="42" rx="9" fill="#f6f7ff"/>
-          <path fill="#74f4df" d="M13 8l12 7-12 7V8Z"/>
-          <path fill="#e9ff68" d="M13 22l12 7-12 7V22Z"/>
-          <path fill="#ff4ec7" d="M25 15l8 5-8 5V15Z"/>
-          <path fill="#f5f4ec" d="M25 25l8 5-8 5V25Z"/>
+          <path fill="#4f978c" d="M9 7l13 7.5L9 22V7Z"/>
+          <path fill="#8ebf6b" d="M9 22l13 7.5L9 37V22Z"/>
+          <path fill="#6a8dbd" d="M22 14.5 35 22l-13 7.5v-15Z"/>
+          <path fill="#b96cae" d="M22 7l13 7.5-13 7.5V7Z"/>
         </svg>
       `
     };
 
     $$(".payment-icons span").forEach((item) => {
-      const label = getText(item);
-      const key = label.toLowerCase().includes("visa")
+      const rawLabel = getText(item);
+      const key = item.dataset.paymentIcon || (rawLabel.toLowerCase().includes("visa")
         ? "visa"
-        : label.toLowerCase().includes("мир")
+        : rawLabel.toLowerCase().includes("мир")
           ? "mir"
-          : label.toLowerCase().includes("сбп")
+          : rawLabel.toLowerCase().includes("сбп")
             ? "sbp"
-            : "";
+            : "");
+      const label = key === "visa" ? "Visa" : key === "mir" ? "МИР" : key === "sbp" ? "СБП" : rawLabel;
       item.title = `Оплата: ${label}`;
       item.setAttribute("aria-label", `Оплата: ${label}`);
       if (key && item.dataset.paymentIcon !== key) {
@@ -617,6 +701,7 @@
     enhanceProductCarousel();
     enhancePreorder();
     enhanceAccount();
+    enhanceMapLink();
     enhancePaymentLabels();
     enhanceFeaturedTrailers();
   };

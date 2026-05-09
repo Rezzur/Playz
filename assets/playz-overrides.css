@@ -515,21 +515,25 @@
 }
 
 .payment-icons {
-  gap: 12px !important;
+  gap: 10px !important;
 }
 
 .payment-icons span,
 .payment-service {
   min-width: 0 !important;
   min-height: 0 !important;
-  width: auto !important;
-  height: auto !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  color: var(--paper) !important;
-  background: transparent !important;
+  width: 72px !important;
+  height: 42px !important;
+  padding: 7px 10px !important;
+  border: 1px solid rgb(245 244 236 / 18%) !important;
+  border-radius: 9px !important;
+  color: #1c2430 !important;
+  background: #eef0f2 !important;
   line-height: 0;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 76%), 0 10px 22px rgb(0 0 0 / 18%);
+  opacity: .9;
 }
 
 .payment-icons span::before,
@@ -538,11 +542,15 @@
 }
 
 .payment-service__mark {
-  width: 48px;
-  height: 28px;
+  width: 54px;
+  height: 26px;
   flex: none;
   display: block;
-  filter: drop-shadow(0 0 8px rgb(116 244 223 / 18%));
+  filter: none;
+}
+
+.payment-service--visa .payment-service__mark {
+  width: 55px;
 }
 
 .payment-service--mir .payment-service__mark {
@@ -550,7 +558,89 @@
 }
 
 .payment-service--sbp .payment-service__mark {
-  width: 34px;
+  width: 28px;
+}
+
+.modal-backdrop {
+  animation: playz-modal-backdrop .2s ease both;
+}
+
+.legal-modal {
+  width: min(620px, calc(100vw - 28px)) !important;
+  max-height: min(76dvh, 620px);
+  overflow: hidden;
+  animation: playz-legal-modal-in .28s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.legal-modal.is-full-legal .legal-copy {
+  display: none;
+}
+
+.legal-modal .legal-copy,
+.legal-modal .legal-copy-full {
+  max-height: min(48dvh, 390px);
+  overflow: auto;
+  padding-right: 6px;
+  display: grid;
+  gap: 18px;
+  transition: opacity .18s ease;
+}
+
+.legal-modal .legal-copy.is-loading,
+.legal-modal .legal-copy-full.is-loading {
+  opacity: .55;
+}
+
+.legal-modal .legal-copy section,
+.legal-modal .legal-copy-full section {
+  display: grid;
+  gap: 7px;
+}
+
+.legal-modal .legal-copy h2,
+.legal-modal .legal-copy-full h2 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.legal-modal .legal-copy p,
+.legal-modal .legal-copy-full p {
+  margin: 0;
+  color: var(--paper-2);
+  line-height: 1.65;
+}
+
+.legal-modal .legal-copy a,
+.legal-modal .legal-copy-full a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@keyframes playz-modal-backdrop {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes playz-legal-modal-in {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+    scale: .97;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -562,6 +652,11 @@
   .playz-pressable:active {
     translate: 0;
     scale: 1;
+  }
+
+  .modal-backdrop,
+  .legal-modal {
+    animation: none;
   }
 }
 
