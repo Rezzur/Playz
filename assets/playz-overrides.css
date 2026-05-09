@@ -189,6 +189,16 @@
   box-shadow: 0 0 0 1px var(--accent), 0 12px 28px rgb(116 244 223 / 18%);
 }
 
+/* Genre cards */
+.genre-tile {
+  grid-template-rows: auto minmax(46px, auto) minmax(34px, auto) !important;
+  min-height: 152px !important;
+}
+
+.genre-tile em {
+  display: none !important;
+}
+
 @media (width <= 760px) {
   .detail-media {
     height: auto;
