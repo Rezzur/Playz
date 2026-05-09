@@ -1,5 +1,45 @@
 /* Production-only layout fixes for the static Playz build. */
 
+.playz-pressable {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition-property: scale, translate, filter, box-shadow, transform, border-color, background-color, color, opacity;
+  transition-duration: .16s;
+  transition-timing-function: ease;
+}
+
+.playz-pressable.is-pressing,
+.playz-pressable:active {
+  translate: 0 1px;
+  scale: .985;
+  filter: brightness(1.08) saturate(1.04);
+}
+
+.playz-pressable.is-clicked {
+  animation: playz-click-pop .28s cubic-bezier(.22, 1, .36, 1);
+}
+
+.playz-pressable:disabled,
+.playz-pressable[aria-disabled="true"] {
+  translate: 0;
+  scale: 1;
+  filter: none;
+}
+
+@keyframes playz-click-pop {
+  0% {
+    scale: .985;
+  }
+
+  54% {
+    scale: 1.025;
+  }
+
+  100% {
+    scale: 1;
+  }
+}
+
 .trailer-modal-backdrop {
   align-items: center;
   overflow: auto;
@@ -474,20 +514,55 @@
   right: 10px;
 }
 
-.payment-icons span {
-  min-width: 68px;
-  justify-content: center;
-  color: var(--paper) !important;
-  background: linear-gradient(135deg, rgb(116 244 223 / 10%), rgb(245 244 236 / 5%));
+.payment-icons {
+  gap: 12px !important;
 }
 
-.payment-icons span::before {
-  content: "";
-  width: 18px;
-  height: 12px;
-  border: 1px solid currentColor;
-  border-radius: 3px;
-  box-shadow: inset 0 -4px 0 rgb(116 244 223 / 22%);
+.payment-icons span,
+.payment-service {
+  min-width: 0 !important;
+  min-height: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: var(--paper) !important;
+  background: transparent !important;
+  line-height: 0;
+}
+
+.payment-icons span::before,
+.payment-service::before {
+  display: none !important;
+}
+
+.payment-service__mark {
+  width: 48px;
+  height: 28px;
+  flex: none;
+  display: block;
+  filter: drop-shadow(0 0 8px rgb(116 244 223 / 18%));
+}
+
+.payment-service--mir .payment-service__mark {
+  width: 50px;
+}
+
+.payment-service--sbp .payment-service__mark {
+  width: 34px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .playz-pressable.is-clicked {
+    animation: none;
+  }
+
+  .playz-pressable.is-pressing,
+  .playz-pressable:active {
+    translate: 0;
+    scale: 1;
+  }
 }
 
 @media (width <= 980px) {

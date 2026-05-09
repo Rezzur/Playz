@@ -21,6 +21,37 @@
       img{max-width:100%;height:auto}
     </style>
     <title>Playz - игры без ожидания</title>
+    <script>
+      (() => {
+        try {
+          if ("scrollRestoration" in window.history) {
+            window.history.scrollRestoration = "manual";
+          }
+
+          const navigation = window.performance?.getEntriesByType?.("navigation")?.[0];
+          const isReload =
+            navigation?.type === "reload" ||
+            window.performance?.navigation?.type === 1;
+
+          if (isReload) {
+            const scrollY = Number(window.sessionStorage?.getItem("playz_scroll_y") || 0);
+            window.__PLAYZ_RELOAD_RESTORE__ = {
+              hash: window.location.hash,
+              y: Number.isFinite(scrollY) ? scrollY : 0
+            };
+
+            window.scrollTo(0, 0);
+            window.history.replaceState(
+              null,
+              "",
+              `${window.location.pathname}${window.location.search}`
+            );
+          }
+        } catch {
+          // If browser APIs are restricted, keep the default browser behavior.
+        }
+      })();
+    </script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -60,8 +91,8 @@
     </script>
     <script type="module" crossorigin src="/assets/index-C-bIT83M.js?v=review-rating-1"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-CDj8XXHm.css">
-    <link rel="stylesheet" href="/assets/playz-overrides.css?v=tz-release-3">
-    <script type="module" src="/assets/playz-tz-release.js?v=tz-release-4"></script>
+    <link rel="stylesheet" href="/assets/playz-overrides.css?v=click-ui-2">
+    <script type="module" src="/assets/playz-tz-release.js?v=click-ui-2"></script>
   </head>
   <body>
     <div id="root"></div>

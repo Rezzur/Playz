@@ -2,6 +2,7 @@
   const EVENT_STORE = "playz_events";
   const SAVED_SEARCH_STORE = "playz_saved_search";
   const AB_STORE = "playz_ab_cta";
+  const SCROLL_STORE = "playz_scroll_y";
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -41,6 +42,91 @@
   window.trackEvent = window.trackEvent || saveEvent;
 
   const getText = (node) => (node?.textContent || "").trim().replace(/\s+/g, " ");
+
+  const getTargetFromHash = (hash) => {
+    if (!hash) return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch {
+      return document.getElementById(hash.slice(1));
+    }
+  };
+
+  const getMaxScrollY = () => Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+
+  const clampScrollY = (value) => Math.min(Math.max(0, Number(value) || 0), getMaxScrollY());
+
+  const bindScrollMemory = () => {
+    if (document.documentElement.dataset.scrollMemoryBound) return;
+    document.documentElement.dataset.scrollMemoryBound = "true";
+
+    let frame = 0;
+    const save = () => {
+      frame = 0;
+      try {
+        sessionStorage.setItem(SCROLL_STORE, String(Math.round(window.scrollY)));
+      } catch {}
+    };
+
+    window.addEventListener(
+      "scroll",
+      () => {
+        if (frame) return;
+        frame = requestAnimationFrame(save);
+      },
+      { passive: true }
+    );
+    window.addEventListener("pagehide", save);
+    window.addEventListener("beforeunload", save);
+    save();
+  };
+
+  const restoreReloadScroll = () => {
+    const restore = window.__PLAYZ_RELOAD_RESTORE__;
+    if (!restore || restore.done) return;
+    restore.done = true;
+
+    const targetHash = restore.hash || "";
+    const savedY = Number(restore.y || 0);
+    let attempts = 0;
+
+    const getRestoreY = () => {
+      if (savedY > 0) return clampScrollY(savedY);
+      const target = getTargetFromHash(targetHash);
+      if (!target) return 0;
+      return clampScrollY(target.getBoundingClientRect().top + window.scrollY);
+    };
+
+    const run = () => {
+      if (savedY > 0 && savedY > getMaxScrollY() && attempts <= 45) {
+        attempts += 1;
+        requestAnimationFrame(run);
+        return;
+      }
+
+      const y = getRestoreY();
+      const hasTarget = y > 8 || !targetHash || attempts > 45;
+
+      if (!hasTarget) {
+        attempts += 1;
+        requestAnimationFrame(run);
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: y, left: 0, behavior: "smooth" });
+        if (targetHash) {
+          window.history.replaceState(
+            null,
+            "",
+            `${window.location.pathname}${window.location.search}${targetHash}`
+          );
+        }
+      });
+    };
+
+    requestAnimationFrame(run);
+  };
 
   const setAbVariant = () => {
     let variant = "catalog_first";
@@ -318,6 +404,103 @@
     });
   };
 
+  const bindGlobalPressFeedback = () => {
+    if (document.documentElement.dataset.pressFeedbackBound) return;
+    document.documentElement.dataset.pressFeedbackBound = "true";
+
+    const selector = [
+      "button",
+      "a.button",
+      "a.icon-button",
+      ".footer a",
+      ".community-links a",
+      ".event-row a",
+      ".map-block a",
+      ".trailer-preview",
+      ".faq-link",
+      ".brand",
+      ".genre-scroll",
+      ".preorder-term"
+    ].join(",");
+
+    const getPressable = (target) => {
+      if (!(target instanceof Element)) return null;
+      const pressable = target.closest(selector);
+      if (!pressable) return null;
+      if (pressable.matches(":disabled,[aria-disabled='true']")) return null;
+      return pressable;
+    };
+
+    const activePressables = new Set();
+
+    const release = (element) => {
+      if (!element) return;
+      element.classList.remove("is-pressing");
+      activePressables.delete(element);
+    };
+
+    const releaseAll = () => {
+      activePressables.forEach((element) => element.classList.remove("is-pressing"));
+      activePressables.clear();
+    };
+
+    const markClicked = (element) => {
+      if (!element) return;
+      element.classList.remove("is-clicked");
+      void element.offsetWidth;
+      element.classList.add("is-clicked");
+      window.setTimeout(() => element.classList.remove("is-clicked"), 320);
+    };
+
+    document.addEventListener("pointerdown", (event) => {
+      if (event.button && event.button !== 0) return;
+      const pressable = getPressable(event.target);
+      if (!pressable) return;
+      pressable.classList.add("playz-pressable", "is-pressing");
+      pressable.dataset.pointerId = String(event.pointerId);
+      activePressables.add(pressable);
+    }, true);
+
+    document.addEventListener("pointerup", (event) => {
+      const pressable = getPressable(event.target);
+      releaseAll();
+      if (pressable) markClicked(pressable);
+    }, true);
+
+    document.addEventListener("pointercancel", (event) => {
+      releaseAll();
+    }, true);
+
+    document.addEventListener("pointerleave", (event) => {
+      release(getPressable(event.target));
+    }, true);
+
+    window.addEventListener("blur", releaseAll);
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const pressable = getPressable(event.target);
+      if (!pressable) return;
+      pressable.classList.add("playz-pressable", "is-pressing");
+      activePressables.add(pressable);
+    }, true);
+
+    document.addEventListener("keyup", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const pressable = getPressable(event.target);
+      if (!pressable) return;
+      release(pressable);
+      markClicked(pressable);
+    }, true);
+
+    const markExisting = () => {
+      $$(selector).forEach((element) => element.classList.add("playz-pressable"));
+    };
+
+    markExisting();
+    return markExisting;
+  };
+
   const enhanceAccount = () => {
     const profile = $('button[aria-label="Профиль"]');
     if (!profile || profile.dataset.accountReady) return;
@@ -377,9 +560,48 @@
   };
 
   const enhancePaymentLabels = () => {
+    const icons = {
+      visa: `
+        <svg class="payment-service__mark" viewBox="0 0 84 44" aria-hidden="true" focusable="false">
+          <rect x="1" y="1" width="82" height="42" rx="9" fill="#f6f7ff"/>
+          <path fill="#19244f" d="M23.9 29.3h-5.1l3.2-14.6h5.1l-3.2 14.6Zm18.5-14.2c-1-.4-2.5-.8-4.3-.8-4.7 0-8 2.3-8 5.6 0 2.5 2.4 3.8 4.2 4.6 1.9.9 2.5 1.4 2.5 2.2 0 1.2-1.5 1.7-3 1.7-2 0-3.1-.3-4.7-1l-.7-.3-.7 4.1c1.1.5 3.2.9 5.3 1 5 0 8.2-2.3 8.3-5.9 0-1.9-1.2-3.4-4-4.6-1.7-.8-2.7-1.3-2.7-2.1 0-.7.9-1.5 2.8-1.5 1.6 0 2.8.3 3.7.7l.4.2.9-3.9Zm13.1-.4h-4c-1.2 0-2.2.3-2.7 1.5L41 29.3h5.3l1.1-2.8h6.5l.6 2.8h4.7l-3.7-14.6Zm-6.6 8 2.7-6.6 1.5 6.6h-4.2Zm-34.4-8-5 10-2.1-9.7c-.2-1.1-1.1-1.4-2.1-1.4H1.2l-.1.4c1 .2 2.1.6 2.8 1 1.7.9 2.1 1.7 2.4 3l3.9 11.3h5.4l8-14.6h-5.1Z"/>
+        </svg>
+      `,
+      mir: `
+        <svg class="payment-service__mark" viewBox="0 0 76 44" aria-hidden="true" focusable="false">
+          <rect x="1" y="1" width="74" height="42" rx="9" fill="#f6f7ff"/>
+          <path fill="#74f4df" d="M13 14h8.7c1.4 0 2.7.9 3.1 2.2l2 6.2 4-8.4h6.5v16h-4.5v-9.2l-4.6 9.2h-3.5l-3-9.2V30H17V18.2h-4V14Z"/>
+          <path fill="#e9ff68" d="M41 14h9.7c4.6 0 8.3 3.5 8.3 8s-3.7 8-8.3 8H41V14Zm4.8 4.2v7.6h4.6c2.2 0 3.8-1.6 3.8-3.8s-1.6-3.8-3.8-3.8h-4.6Z"/>
+          <path fill="#ff4ec7" d="M58 14h7l-4.1 5.7H55L58 14Z"/>
+        </svg>
+      `,
+      sbp: `
+        <svg class="payment-service__mark" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+          <rect x="1" y="1" width="42" height="42" rx="9" fill="#f6f7ff"/>
+          <path fill="#74f4df" d="M13 8l12 7-12 7V8Z"/>
+          <path fill="#e9ff68" d="M13 22l12 7-12 7V22Z"/>
+          <path fill="#ff4ec7" d="M25 15l8 5-8 5V15Z"/>
+          <path fill="#f5f4ec" d="M25 25l8 5-8 5V25Z"/>
+        </svg>
+      `
+    };
+
     $$(".payment-icons span").forEach((item) => {
       const label = getText(item);
+      const key = label.toLowerCase().includes("visa")
+        ? "visa"
+        : label.toLowerCase().includes("мир")
+          ? "mir"
+          : label.toLowerCase().includes("сбп")
+            ? "sbp"
+            : "";
       item.title = `Оплата: ${label}`;
+      item.setAttribute("aria-label", `Оплата: ${label}`);
+      if (key && item.dataset.paymentIcon !== key) {
+        item.dataset.paymentIcon = key;
+        item.classList.add("payment-service", `payment-service--${key}`);
+        item.innerHTML = icons[key];
+      }
     });
   };
 
@@ -402,10 +624,13 @@
   const boot = () => {
     bootAnalyticsVendors();
     setAbVariant();
+    bindScrollMemory();
+    bindGlobalPressFeedback();
     bindServerForms();
     bindSavedSearch();
     enhanceCheckout();
     runEnhancements();
+    restoreReloadScroll();
 
     const observer = new MutationObserver(() => {
       if (observer.scheduled) return;
