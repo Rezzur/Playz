@@ -128,3 +128,83 @@
     right: 12px;
   }
 }
+
+/* Footer alignment */
+.footer {
+  display: grid !important;
+  grid-template-columns: minmax(260px, .95fr) minmax(390px, 1.35fr) minmax(230px, .8fr) !important;
+  grid-template-areas:
+    "brand menu socials"
+    "brand legal socials"
+    "payments payments copyright";
+  align-items: start !important;
+  gap: 18px 32px !important;
+}
+
+.footer > div:first-child {
+  grid-area: brand;
+}
+
+.footer-menu {
+  grid-area: menu;
+  justify-content: center !important;
+}
+
+.footer nav:not(.footer-menu) {
+  grid-area: legal;
+  justify-content: center !important;
+}
+
+.payment-icons {
+  grid-area: payments;
+  justify-content: flex-start !important;
+  align-self: end;
+}
+
+.social-icons {
+  grid-area: socials;
+  justify-content: flex-end !important;
+  align-self: start;
+}
+
+.copyright {
+  grid-area: copyright;
+  justify-self: end;
+  align-self: center;
+  max-width: none !important;
+  margin: 0 !important;
+  text-align: right;
+}
+
+.footer nav,
+.payment-icons,
+.social-icons {
+  align-items: center;
+  align-content: flex-start;
+}
+
+@media (width <= 980px) {
+  .footer {
+    grid-template-columns: 1fr !important;
+    grid-template-areas:
+      "brand"
+      "menu"
+      "legal"
+      "payments"
+      "socials"
+      "copyright";
+    gap: 16px !important;
+  }
+
+  .footer-menu,
+  .footer nav:not(.footer-menu),
+  .payment-icons,
+  .social-icons {
+    justify-content: flex-start !important;
+  }
+
+  .copyright {
+    justify-self: start;
+    text-align: left;
+  }
+}
