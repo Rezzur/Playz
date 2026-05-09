@@ -552,8 +552,9 @@
     if (document.documentElement.dataset.adaptiveCursorBound) return;
     document.documentElement.dataset.adaptiveCursorBound = "true";
 
-    const cyan = { red: 116, green: 244, blue: 223, alpha: 1 };
-    const ink = { red: 7, green: 16, blue: 14, alpha: 1 };
+    const cyan = { name: "cyan", red: 116, green: 244, blue: 223, alpha: 1 };
+    const paper = { name: "paper", red: 245, green: 244, blue: 236, alpha: 1 };
+    const ink = { name: "ink", red: 7, green: 16, blue: 14, alpha: 1 };
     const fallbackSurface = { red: 12, green: 13, blue: 10, alpha: 1 };
     const editableSelector = [
       "textarea",
@@ -594,14 +595,23 @@
     let frame = 0;
 
     const parseColor = (value) => {
-      if (!value || value === "transparent") return null;
+      if (!value || value === "transparent" || value === "none") return null;
       const match = value.match(/rgba?\(([^)]+)\)/);
       if (!match) return null;
 
       const parts = match[1]
-        .split(",")
-        .map((part) => part.trim())
-        .map((part) => part.endsWith("%") ? (Number(part.slice(0, -1)) / 100) * 255 : Number(part));
+        .replaceAll(",", " ")
+        .replace("/", " ")
+        .trim()
+        .split(/\s+/)
+        .map((part, index) => {
+          if (part.endsWith("%")) {
+            const value = Number(part.slice(0, -1));
+            return index < 3 ? (value / 100) * 255 : value / 100;
+          }
+
+          return Number(part);
+        });
 
       if (parts.length < 3 || parts.some((part) => Number.isNaN(part))) return null;
 
@@ -634,6 +644,112 @@
       return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue);
     };
 
+    const contrastRatio = (first, second) => {
+      const firstLuminance = luminance(first);
+      const secondLuminance = luminance(second);
+      const light = Math.max(firstLuminance, secondLuminance);
+      const dark = Math.min(firstLuminance, secondLuminance);
+
+      return (light + 0.05) / (dark + 0.05);
+    };
+
+    const rangeFromPoint = (x, y) => {
+      if (document.caretPositionFromPoint) {
+        const position = document.caretPositionFromPoint(x, y);
+        if (!position?.offsetNode) return null;
+
+        const range = document.createRange();
+        range.setStart(position.offsetNode, position.offset);
+        range.collapse(true);
+        return range;
+      }
+
+      return document.caretRangeFromPoint?.(x, y) || null;
+    };
+
+    const pointTouchesRect = (x, y, rect, tolerance = 2) => (
+      x >= rect.left - tolerance &&
+      x <= rect.right + tolerance &&
+      y >= rect.top - tolerance &&
+      y <= rect.bottom + tolerance
+    );
+
+    const readTextSurfaceColor = (target, x, y) => {
+      const range = rangeFromPoint(x, y);
+      const textNode = range?.startContainer?.nodeType === Node.TEXT_NODE
+        ? range.startContainer
+        : null;
+
+      if (!textNode || !textNode.textContent?.trim()) return null;
+
+      const owner = textNode.parentElement;
+      if (!owner || owner.closest(".target-cursor")) return null;
+
+      const text = textNode.textContent;
+      const offsets = [
+        Math.max(0, Math.min(text.length - 1, range.startOffset - 1)),
+        Math.max(0, Math.min(text.length - 1, range.startOffset)),
+      ];
+
+      const touchesGlyph = offsets.some((offset) => {
+        if (!text[offset]?.trim()) return false;
+
+        const glyphRange = document.createRange();
+        glyphRange.setStart(textNode, offset);
+        glyphRange.setEnd(textNode, offset + 1);
+
+        const isHit = Array.from(glyphRange.getClientRects()).some((rect) => pointTouchesRect(x, y, rect, 3));
+        glyphRange.detach?.();
+        return isHit;
+      });
+
+      if (!touchesGlyph) return null;
+      if (target instanceof Element) {
+        const interactiveTextContainer = target.closest("button, a, label, [role='button']");
+        const ownsText =
+          owner === target ||
+          owner.contains(target) ||
+          !!interactiveTextContainer?.contains(owner);
+
+        if (!ownsText) return null;
+      }
+
+      const color = parseColor(getComputedStyle(owner).color);
+      if (!color) return null;
+
+      return {
+        kind: "text",
+        paint: color,
+        backdrop: readSurfaceColor(owner),
+      };
+    };
+
+    const readPaintColor = (target) => {
+      if (!(target instanceof Element)) return null;
+
+      let node = target;
+      while (node && node !== document.documentElement) {
+        const styles = getComputedStyle(node);
+        const fill = parseColor(styles.fill);
+        const stroke = parseColor(styles.stroke);
+
+        if (node instanceof SVGElement) {
+          const paint = fill && fill.alpha > 0 ? fill : stroke && stroke.alpha > 0 ? stroke : null;
+          if (paint) {
+            return {
+              kind: "paint",
+              paint,
+              backdrop: readSurfaceColor(node.parentElement || target),
+            };
+          }
+        }
+
+        node = node.parentElement;
+      }
+
+      return null;
+    };
+
     const readSurfaceColor = (target) => {
       let surface = fallbackSurface;
       let node = target instanceof Element ? target : null;
@@ -653,12 +769,71 @@
       return surface;
     };
 
+    const readVisualSurfaceColor = (target, x, y) => {
+      const detailedSurface =
+        readTextSurfaceColor(target, x, y) ||
+        readPaintColor(target);
+
+      if (detailedSurface) return detailedSurface;
+
+      const surface = readSurfaceColor(target);
+      return {
+        kind: "surface",
+        paint: surface,
+        backdrop: surface,
+      };
+    };
+
+    const cursorShadow = (color) => {
+      if (color.name === "ink") return "rgba(7, 16, 14, 0.34)";
+      if (color.name === "paper") return "rgba(245, 244, 236, 0.34)";
+      return "rgba(116, 244, 223, 0.44)";
+    };
+
+    const colorScore = (candidate, paint, backdrop, options = {}) => {
+      const paintContrast = contrastRatio(candidate, paint);
+      const backdropContrast = contrastRatio(candidate, backdrop);
+      const baseScore = options.includeBackdrop === false
+        ? paintContrast
+        : Math.min(paintContrast, backdropContrast);
+      const preference = candidate.name === "cyan" ? 0.22 : 0;
+
+      return baseScore + preference;
+    };
+
+    const bestColor = (paint, backdrop, candidates, options) => candidates.reduce((best, candidate) => {
+      const score = colorScore(candidate, paint, backdrop, options);
+      if (!best || score > best.score) return { color: candidate, score };
+      return best;
+    }, null).color;
+
     const colorForSurface = (surface) => {
-      const brightSurface = luminance(surface) > 0.48;
-      const color = brightSurface ? ink : cyan;
-      const shadow = brightSurface
-        ? "rgba(7, 16, 14, 0.34)"
-        : "rgba(116, 244, 223, 0.44)";
+      const paint = surface?.paint || fallbackSurface;
+      const backdrop = surface?.backdrop || paint;
+      const paintLuminance = luminance(paint);
+      const backdropLuminance = luminance(backdrop);
+      const brightPaint = paintLuminance > 0.68;
+      const darkBackdrop = backdropLuminance < 0.18;
+
+      let color = cyan;
+
+      if (surface?.kind === "text") {
+        color = brightPaint
+          ? ink
+          : bestColor(paint, backdrop, [cyan, paper], { includeBackdrop: true });
+      } else if (surface?.kind === "paint") {
+        color = brightPaint
+          ? ink
+          : bestColor(paint, backdrop, darkBackdrop ? [cyan, paper] : [cyan, paper, ink], { includeBackdrop: true });
+      } else if (brightPaint) {
+        color = ink;
+      } else if (darkBackdrop) {
+        color = cyan;
+      } else {
+        color = bestColor(paint, backdrop, darkBackdrop ? [cyan, paper] : [cyan, paper, ink], { includeBackdrop: false });
+      }
+
+      const shadow = cursorShadow(color);
 
       return {
         color: `rgb(${Math.round(color.red)} ${Math.round(color.green)} ${Math.round(color.blue)})`,
@@ -686,9 +861,13 @@
       if (!cursor) return;
 
       const target = document.elementFromPoint(lastPoint.x, lastPoint.y);
-      const surface = readSurfaceColor(target);
+      const editableTarget = isEditable(target);
+      const shouldUseTextMode = editableTarget || (pointerDown && textSelecting) || (pointerDown && hasLiveSelection());
+      const editableSurface = editableTarget ? readSurfaceColor(target) : null;
+      const surface = editableSurface
+        ? { kind: "surface", paint: editableSurface, backdrop: editableSurface }
+        : readVisualSurfaceColor(target, lastPoint.x, lastPoint.y);
       const { color, shadow } = colorForSurface(surface);
-      const shouldUseTextMode = isEditable(target) || (pointerDown && textSelecting) || (pointerDown && hasLiveSelection());
 
       cursor.style.setProperty("--cursor-color", color);
       cursor.style.setProperty("--cursor-shadow", shadow);

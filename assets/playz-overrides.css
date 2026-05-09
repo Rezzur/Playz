@@ -48,10 +48,12 @@ html {
   background: var(--playz-cursor-color, var(--cursor-color, var(--accent))) !important;
   border-color: var(--playz-cursor-color, var(--cursor-color, var(--accent))) !important;
   box-shadow: 0 0 20px var(--playz-cursor-shadow, var(--cursor-shadow, rgb(116 244 223 / 44%))) !important;
+  transition: width .18s ease, height .18s ease, border-radius .18s ease, background-color .16s ease, border-color .16s ease, box-shadow .16s ease !important;
 }
 
 .target-cursor .target-cursor__external-icon {
   color: var(--playz-cursor-color, var(--cursor-color, var(--accent))) !important;
+  transition: color .16s ease, opacity .16s ease, transform .18s ease !important;
 }
 
 .target-cursor.playz-dot-mode:not(.is-external-link) .target-cursor__dot {
