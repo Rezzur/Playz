@@ -1,7 +1,12 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": null,
+  "outputDirectory": ".",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/.*|assets/.*|images/.*|offer\\.html|privacy\\.html).*)",
       "destination": "/index.html"
     }
   ]
