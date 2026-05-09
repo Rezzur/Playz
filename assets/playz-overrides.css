@@ -1,0 +1,130 @@
+/* Production-only layout fixes for the static Playz build. */
+
+.trailer-modal-backdrop {
+  align-items: center;
+  overflow: auto;
+}
+
+.trailer-modal {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr);
+  gap: 18px 22px;
+  width: min(1120px, calc(100vw - 40px)) !important;
+  max-height: calc(100dvh - 40px);
+  padding: 18px !important;
+  overflow: hidden;
+}
+
+.trailer-frame {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  align-self: center;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.trailer-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, transparent, rgb(0 0 0 / 30%));
+}
+
+.trailer-frame img {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  object-fit: cover;
+  object-position: center;
+  opacity: .72;
+  filter: saturate(1.05) contrast(1.08);
+}
+
+.trailer-frame svg {
+  z-index: 2;
+  width: 74px;
+  height: 74px;
+  padding: 14px;
+  border: 2px solid var(--accent);
+  border-radius: 999px;
+  background: rgb(6 16 13 / 80%);
+  color: var(--accent);
+}
+
+.trailer-modal h3 {
+  grid-column: 2;
+  margin: 54px 48px 0 0;
+  font-size: clamp(2rem, 3vw, 3.2rem);
+  line-height: .95;
+}
+
+.trailer-modal p {
+  grid-column: 2;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.trailer-modal__link {
+  grid-column: 2;
+  justify-content: center;
+  width: 100%;
+  margin-top: auto !important;
+}
+
+@media (width <= 760px) {
+  .trailer-modal-backdrop {
+    padding: 10px;
+  }
+
+  .trailer-modal {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: calc(100vw - 20px) !important;
+    max-height: calc(100dvh - 20px);
+    padding: 12px !important;
+    overflow-y: auto;
+  }
+
+  .trailer-frame {
+    grid-column: 1;
+    grid-row: auto;
+    aspect-ratio: 16 / 9;
+  }
+
+  .trailer-frame svg {
+    width: 58px;
+    height: 58px;
+    padding: 12px;
+  }
+
+  .trailer-modal h3,
+  .trailer-modal p,
+  .trailer-modal__link {
+    grid-column: 1;
+  }
+
+  .trailer-modal h3 {
+    margin: 4px 54px 0 0;
+    font-size: clamp(1.55rem, 7vw, 2.35rem);
+  }
+
+  .trailer-modal p {
+    font-size: .98rem;
+  }
+
+  .trailer-modal__link {
+    margin-top: 0 !important;
+  }
+
+  .trailer-modal__close {
+    top: 12px;
+    right: 12px;
+  }
+}
