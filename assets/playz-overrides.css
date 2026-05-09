@@ -287,6 +287,10 @@
   align-content: flex-start;
 }
 
+.footer-brand {
+  padding-left: 0 !important;
+}
+
 @media (width <= 980px) {
   .footer {
     grid-template-columns: 1fr !important;
