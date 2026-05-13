@@ -83,6 +83,53 @@
 
   const clampScrollY = (value) => Math.min(Math.max(0, Number(value) || 0), getMaxScrollY());
 
+  const bindPageLoadProgress = () => {
+    if (document.documentElement.dataset.pageProgressBound) return;
+    document.documentElement.dataset.pageProgressBound = "true";
+
+    const root = document.documentElement;
+    let progress = Number.parseFloat(getComputedStyle(root).getPropertyValue("--playz-page-progress")) || 0.08;
+    let timer = 0;
+
+    const setProgress = (value) => {
+      progress = Math.max(progress, Math.min(value, 1));
+      root.style.setProperty("--playz-page-progress", progress.toFixed(3));
+    };
+
+    root.classList.add("is-page-loading");
+    root.classList.remove("is-page-loaded");
+    setProgress(document.readyState === "loading" ? 0.14 : 0.42);
+
+    timer = window.setInterval(() => {
+      if (document.readyState === "complete") {
+        setProgress(0.96);
+        return;
+      }
+
+      const ceiling = document.readyState === "interactive" ? 0.82 : 0.68;
+      const next = progress + Math.max(0.015, (ceiling - progress) * 0.12);
+      setProgress(Math.min(next, ceiling));
+    }, 140);
+
+    const complete = () => {
+      window.clearInterval(timer);
+      setProgress(1);
+      root.classList.add("is-page-loaded");
+      root.classList.remove("is-page-loading");
+
+      window.setTimeout(() => {
+        root.style.removeProperty("--playz-page-progress");
+      }, 620);
+    };
+
+    if (document.readyState === "complete") {
+      window.setTimeout(complete, 260);
+    } else {
+      window.addEventListener("load", () => window.setTimeout(complete, 220), { once: true });
+      document.addEventListener("DOMContentLoaded", () => setProgress(0.72), { once: true });
+    }
+  };
+
   const bindScrollMemory = () => {
     if (document.documentElement.dataset.scrollMemoryBound) return;
     document.documentElement.dataset.scrollMemoryBound = "true";
@@ -620,6 +667,7 @@
     let textSelecting = false;
     let downPoint = { x: 0, y: 0 };
     let frame = 0;
+    let activeCursorColor = cyan;
 
     const parseColor = (value) => {
       if (!value || value === "transparent" || value === "none") return null;
@@ -817,48 +865,72 @@
       return "rgba(116, 244, 223, 0.44)";
     };
 
-    const colorScore = (candidate, paint, backdrop, options = {}) => {
-      const paintContrast = contrastRatio(candidate, paint);
-      const backdropContrast = contrastRatio(candidate, backdrop);
-      const baseScore = options.includeBackdrop === false
-        ? paintContrast
-        : Math.min(paintContrast, backdropContrast);
-      const preference = candidate.name === "cyan" ? 0.22 : 0;
+    const colorDistance = (first, second) => Math.hypot(
+      first.red - second.red,
+      first.green - second.green,
+      first.blue - second.blue
+    );
 
-      return baseScore + preference;
+    const cursorCandidates = [cyan, ink, paper];
+
+    const isVividGreenSurface = (color) => (
+      color.green > 170 &&
+      color.red > 100 &&
+      color.blue < 150 &&
+      color.green - color.blue > 55
+    );
+
+    const scoreCursorColor = (candidate, surfaceColor) => {
+      const contrast = contrastRatio(candidate, surfaceColor);
+      const distance = colorDistance(candidate, surfaceColor) / 441.7;
+      const defaultBias = candidate.name === "cyan" ? 0.9 : 0;
+      const lightBias = candidate.name === "ink" && luminance(surfaceColor) > 0.7 ? 0.7 : 0;
+      const darkBias = candidate.name === "paper" && luminance(surfaceColor) < 0.09 ? 0.12 : 0;
+
+      return contrast + distance + defaultBias + lightBias + darkBias;
     };
 
-    const bestColor = (paint, backdrop, candidates, options) => candidates.reduce((best, candidate) => {
-      const score = colorScore(candidate, paint, backdrop, options);
-      if (!best || score > best.score) return { color: candidate, score };
-      return best;
-    }, null).color;
+    const chooseCursorColor = (surfaceColor) => {
+      const surfaceLuminance = luminance(surfaceColor);
+      const cyanContrast = contrastRatio(cyan, surfaceColor);
+      const inkContrast = contrastRatio(ink, surfaceColor);
+      const paperContrast = contrastRatio(paper, surfaceColor);
+
+      if (surfaceLuminance > 0.72 || isVividGreenSurface(surfaceColor)) {
+        return inkContrast >= cyanContrast + 0.35 ? ink : cyan;
+      }
+
+      if (cyanContrast >= 2.45) return cyan;
+
+      return cursorCandidates.reduce((best, candidate) => {
+        const score = scoreCursorColor(candidate, surfaceColor);
+        if (!best || score > best.score) return { color: candidate, score };
+        return best;
+      }, null).color || (paperContrast > inkContrast ? paper : ink);
+    };
+
+    const stabilizeCursorColor = (nextColor, surfaceColor) => {
+      if (!activeCursorColor || activeCursorColor.name === nextColor.name) {
+        activeCursorColor = nextColor;
+        return nextColor;
+      }
+
+      const currentContrast = contrastRatio(activeCursorColor, surfaceColor);
+      const nextContrast = contrastRatio(nextColor, surfaceColor);
+      const shouldSwitch =
+        nextColor.name === "cyan" ||
+        nextContrast > currentContrast + 0.85 ||
+        currentContrast < 2.1;
+
+      if (shouldSwitch) activeCursorColor = nextColor;
+      return activeCursorColor;
+    };
 
     const colorForSurface = (surface) => {
       const paint = surface?.paint || fallbackSurface;
       const backdrop = surface?.backdrop || paint;
-      const paintLuminance = luminance(paint);
-      const backdropLuminance = luminance(backdrop);
-      const brightPaint = paintLuminance > 0.68;
-      const darkBackdrop = backdropLuminance < 0.18;
-
-      let color = cyan;
-
-      if (surface?.kind === "text") {
-        color = brightPaint
-          ? ink
-          : bestColor(paint, backdrop, [cyan, paper], { includeBackdrop: true });
-      } else if (surface?.kind === "paint") {
-        color = brightPaint
-          ? ink
-          : bestColor(paint, backdrop, darkBackdrop ? [cyan, paper] : [cyan, paper, ink], { includeBackdrop: true });
-      } else if (brightPaint) {
-        color = ink;
-      } else if (darkBackdrop) {
-        color = cyan;
-      } else {
-        color = bestColor(paint, backdrop, darkBackdrop ? [cyan, paper] : [cyan, paper, ink], { includeBackdrop: false });
-      }
+      const sampledSurface = surface?.kind === "text" ? backdrop : paint;
+      const color = stabilizeCursorColor(chooseCursorColor(sampledSurface), sampledSurface);
 
       const shadow = cursorShadow(color);
 
@@ -920,8 +992,7 @@
         dragMaySelectText = canDragSelectText(event.target);
         lastPoint = { x: event.clientX, y: event.clientY };
         schedule();
-      },
-      true
+      }
     );
 
     document.addEventListener(
@@ -935,8 +1006,7 @@
         }
 
         schedule();
-      },
-      true
+      }
     );
 
     const endPointerSelection = (event) => {
@@ -951,8 +1021,8 @@
       schedule();
     };
 
-    document.addEventListener("pointerup", endPointerSelection, true);
-    document.addEventListener("pointercancel", endPointerSelection, true);
+    document.addEventListener("pointerup", endPointerSelection);
+    document.addEventListener("pointercancel", endPointerSelection);
     document.addEventListener("selectstart", () => {
       if (pointerDown) {
         textSelecting = true;
@@ -1273,6 +1343,7 @@
   };
 
   const boot = () => {
+    bindPageLoadProgress();
     bootAnalyticsVendors();
     setAbVariant();
     bindScrollMemory();
