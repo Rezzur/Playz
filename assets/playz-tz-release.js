@@ -43,6 +43,33 @@
 
   const getText = (node) => (node?.textContent || "").trim().replace(/\s+/g, " ");
 
+  const merchItems = [
+    {
+      title: "Playz x Logitech Keyboard",
+      eyebrow: "Клавиатура",
+      image: "/images/merch-keyboard.jpeg",
+      alt: "Неоновая клавиатура Playz x Logitech",
+      text: "Лимитированная полноразмерная клавиатура с подсветкой в цветах Playz.",
+      price: "от 7 990 ₽",
+    },
+    {
+      title: "Playz x Logitech Mouse",
+      eyebrow: "Мышь",
+      image: "/images/merch-mouse.jpeg",
+      alt: "Неоновая игровая мышь Playz x Logitech",
+      text: "Лёгкая игровая мышь с фирменной подсветкой и быстрым сенсором.",
+      price: "от 4 990 ₽",
+    },
+    {
+      title: "Playz x Logitech Pad",
+      eyebrow: "Коврик",
+      image: "/images/merch-mousepad.jpeg",
+      alt: "Игровой коврик Playz x Logitech с неоновым логотипом",
+      text: "Большой коврик для точного контроля и единого сетапа на столе.",
+      price: "от 2 490 ₽",
+    },
+  ];
+
   const getTargetFromHash = (hash) => {
     if (!hash) return null;
     try {
@@ -1153,6 +1180,87 @@
     });
   };
 
+  const createMerchCard = (item, index) => `
+    <article class="merch-card merch-card--${index === 0 ? "wide" : "compact"}">
+      <figure class="merch-media">
+        <img src="${item.image}" alt="${item.alt}" loading="lazy" decoding="async">
+      </figure>
+      <div class="merch-card__body">
+        <span>${item.eyebrow}</span>
+        <h3>${item.title}</h3>
+        <p>${item.text}</p>
+        <div class="merch-card__bottom">
+          <strong>${item.price}</strong>
+          <a class="button button-plain merch-action" href="#contacts" data-merch-item="${item.title}">
+            Уточнить наличие
+          </a>
+        </div>
+      </div>
+    </article>
+  `;
+
+  const ensureMerchNavLink = () => {
+    $$("header nav, .footer-menu").forEach((nav) => {
+      if ($('a[href="#merch"]', nav)) return;
+
+      const contactLink = $$("a", nav).find((link) => link.getAttribute("href") === "#contacts" || /Контакты/i.test(getText(link)));
+      if (!contactLink) return;
+
+      const link = document.createElement("a");
+      link.href = "#merch";
+      link.textContent = "Мерч";
+      contactLink.before(link);
+    });
+  };
+
+  const enhanceMerchSection = () => {
+    ensureMerchNavLink();
+
+    const contacts = $("#contacts");
+    if (!contacts) return;
+
+    const contactsIndex = $(".section-index", contacts);
+    if (contactsIndex) contactsIndex.textContent = "10";
+
+    if (!$("#merch")) {
+      const section = document.createElement("section");
+      section.id = "merch";
+      section.className = "merch-section";
+      section.innerHTML = `
+        <div class="section-head two-column">
+          <div>
+            <span class="section-index">09</span>
+            <h2>Мерч</h2>
+          </div>
+          <p>Playz x Logitech: вещи для сетапа, которые выглядят как часть витрины, а не как сувенирная полка.</p>
+        </div>
+        <div class="merch-layout">
+          <div class="merch-intro">
+            <span>Limited drop</span>
+            <h3>Неон на столе, порядок в игре</h3>
+            <p>Клавиатура, мышь и коврик в фирменных цветах Playz. Наличие уточняем через поддержку и шоурум в Воронеже.</p>
+            <a class="button button-primary merch-action" href="#contacts" data-merch-item="Playz x Logitech drop">
+              Спросить о мерче
+            </a>
+          </div>
+          <div class="merch-grid">
+            ${merchItems.map(createMerchCard).join("")}
+          </div>
+        </div>
+      `;
+
+      contacts.before(section);
+    }
+
+    $$(".merch-action").forEach((link) => {
+      if (link.dataset.merchBound) return;
+      link.dataset.merchBound = "true";
+      link.addEventListener("click", () => {
+        saveEvent("merch_contact_click", { item: link.dataset.merchItem || getText(link) });
+      });
+    });
+  };
+
   const runEnhancements = () => {
     enhanceLegalLinks();
     enhanceProductCarousel();
@@ -1161,6 +1269,7 @@
     enhanceMapLink();
     enhancePaymentLabels();
     enhanceFeaturedTrailers();
+    enhanceMerchSection();
   };
 
   const boot = () => {
